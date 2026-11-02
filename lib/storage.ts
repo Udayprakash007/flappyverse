@@ -375,3 +375,4 @@ export async function updateHighScore(id: string, score: number): Promise<boolea
   }
   return false;
 }
+

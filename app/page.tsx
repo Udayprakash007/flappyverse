@@ -32,8 +32,12 @@ export default function LandingPage() {
   const [userGames, setUserGames] = useState<Game[]>([]);
   const [featuredGame, setFeaturedGame] = useState<Game | null>(null);
   const [selectedShareGame, setSelectedShareGame] = useState<Game | null>(null);
+  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
     getAllGames().then((games) => {
       setAllGames(games);
       if (games.length > 0) {
@@ -413,9 +417,7 @@ export default function LandingPage() {
           isOpen={Boolean(selectedShareGame)}
           onClose={() => setSelectedShareGame(null)}
           gameTitle={selectedShareGame.title}
-          shareUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/play/${
-            selectedShareGame.slug || selectedShareGame.id
-          }`}
+          shareUrl={`${origin}/play/${selectedShareGame.slug || selectedShareGame.id}`}
         />
       )}
     </div>

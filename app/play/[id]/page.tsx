@@ -16,8 +16,12 @@ function PlayContent({ params }: { params: Promise<{ id: string }> }) {
   const [game, setGame] = useState<Game | null>(null);
   const [loading, setLoading] = useState(true);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShareUrl(window.location.href);
+    }
     getGameByIdOrSlug(idOrSlug).then((loaded) => {
       if (loaded) {
         setGame(loaded);
@@ -35,8 +39,6 @@ function PlayContent({ params }: { params: Promise<{ id: string }> }) {
       }
     }
   };
-
-  const shareUrl = typeof window !== "undefined" ? window.location.href : "";
 
   if (loading) {
     return (

@@ -23,3 +23,4 @@ export function getSupabase(): SupabaseClient | null {
 export function isSupabaseConfigured(): boolean {
   return Boolean(supabaseUrl && supabaseAnonKey);
 }
+

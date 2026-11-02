@@ -112,3 +112,4 @@ CREATE POLICY "Anyone can view high scores"
 CREATE POLICY "Anyone can submit a game score"
   ON public.game_scores FOR INSERT
   WITH CHECK (true);
+

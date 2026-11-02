@@ -48,16 +48,17 @@ function StudioContent() {
   // QR Modal
   const [showShareModal, setShowShareModal] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [origin, setOrigin] = useState("");
 
-  // Current Game State
+  // Current Game State with deterministic initial values for SSR
   const [game, setGame] = useState<Game>({
-    id: `game-${Date.now()}`,
+    id: "game-new",
     title: "My Custom Flappy Adventure",
-    slug: `my-flappy-${Math.floor(Math.random() * 10000)}`,
+    slug: "my-flappy-adventure",
     creatorName: "Player 1",
     description: "Custom game created with my photos and sounds on FlappyVerse!",
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
     isPublished: false,
     playCount: 0,
     highScore: 0,
@@ -96,14 +97,25 @@ function StudioContent() {
     },
   });
 
-  // Load existing game if editing
+  // Load existing game if editing or initialize client-only unique ID & slug
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
     if (editId) {
       getGameByIdOrSlug(editId).then((loaded) => {
         if (loaded) {
           setGame(loaded);
         }
       });
+    } else {
+      setGame((prev) => ({
+        ...prev,
+        id: `game-${Date.now()}`,
+        slug: `my-flappy-${Math.floor(Math.random() * 10000)}`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
     }
   }, [editId]);
 
@@ -305,7 +317,7 @@ function StudioContent() {
     setShowShareModal(true);
   };
 
-  const shareUrl = typeof window !== "undefined" ? `${window.location.origin}/play/${game.slug || game.id}` : "";
+  const shareUrl = origin ? `${origin}/play/${game.slug || game.id}` : "";
 
   return (
     <div className="min-h-screen bg-[#060618] text-slate-100 flex flex-col">

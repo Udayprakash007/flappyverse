@@ -66,3 +66,4 @@ export interface Game {
   obstacles: ObstacleConfig;
   physics: PhysicsConfig;
 }
+

@@ -13,8 +13,12 @@ export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<"trending" | "recent" | "popular">("trending");
   const [selectedShareGame, setSelectedShareGame] = useState<Game | null>(null);
+  const [origin, setOrigin] = useState("");
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
     getAllGames().then((all) => {
       // Show published games
       setGames(all.filter((g) => g.isPublished));
@@ -197,11 +201,10 @@ export default function ExplorePage() {
           isOpen={Boolean(selectedShareGame)}
           onClose={() => setSelectedShareGame(null)}
           gameTitle={selectedShareGame.title}
-          shareUrl={`${typeof window !== "undefined" ? window.location.origin : ""}/play/${
-            selectedShareGame.slug || selectedShareGame.id
-          }`}
+          shareUrl={`${origin}/play/${selectedShareGame.slug || selectedShareGame.id}`}
         />
       )}
     </div>
   );
 }
+

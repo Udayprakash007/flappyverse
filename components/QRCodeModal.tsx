@@ -127,3 +127,4 @@ export default function QRCodeModal({ isOpen, onClose, gameTitle, shareUrl }: QR
     </div>
   );
 }
+
