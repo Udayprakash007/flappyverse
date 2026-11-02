@@ -2,11 +2,14 @@
 
 :root {
   /* Dark navy background with neon gradient accents */
-  --color-primary: #0a0a3b; /* deep navy */
-  --color-secondary: #1e1e5a; /* slightly lighter navy */
-  --color-neon-pink: #ff00ff;
+  --color-primary: #070724;
+  --color-secondary: #12123d;
+  --color-neon-pink: #ff007f;
   --color-neon-blue: #00f0ff;
   --color-neon-purple: #9d00ff;
+  --color-neon-green: #00ff88;
+  --bg-gradient: radial-gradient(circle at 50% 20%, #15154a 0%, #080821 50%, #030310 100%);
+  --text-color: #e0e7ff;
   --font-sans: 'Inter', system-ui, sans-serif;
 }
 
