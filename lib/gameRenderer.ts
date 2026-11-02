@@ -325,9 +325,37 @@ export class GameRenderer {
       ctx.save();
 
       if (this.obstacleImg && this.obstacleImg.complete && this.obstacleImg.naturalWidth > 0) {
-        // Draw custom image obstacle
-        ctx.drawImage(this.obstacleImg, pipe.x, 0, width, pipe.topHeight);
-        ctx.drawImage(this.obstacleImg, pipe.x, pipe.bottomY, width, height - pipe.bottomY - 20);
+        // 1. Draw stylish neon glowing pillar stem
+        const stemGrad = ctx.createLinearGradient(pipe.x, 0, pipe.x + width, 0);
+        stemGrad.addColorStop(0, color);
+        stemGrad.addColorStop(0.5, "#9d00ff");
+        stemGrad.addColorStop(1, color);
+        ctx.fillStyle = stemGrad;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+        ctx.fillRect(pipe.x + 8, 0, width - 16, pipe.topHeight);
+        ctx.fillRect(pipe.x + 8, pipe.bottomY, width - 16, height - pipe.bottomY - 20);
+
+        // 2. Draw Custom Image on Top and Bottom Obstacle Caps
+        const capSize = width + 4;
+        const capX = pipe.x - 2;
+
+        // Top obstacle cap
+        const topCapY = Math.max(0, pipe.topHeight - capSize);
+        const topCapH = Math.min(capSize, pipe.topHeight);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 14;
+        ctx.drawImage(this.obstacleImg, capX, topCapY, capSize, topCapH);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(capX, topCapY, capSize, topCapH);
+
+        // Bottom obstacle cap
+        const btmCapH = Math.min(capSize, height - pipe.bottomY - 20);
+        ctx.drawImage(this.obstacleImg, capX, pipe.bottomY, capSize, btmCapH);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(capX, pipe.bottomY, capSize, btmCapH);
       } else if (obstacleConfig.theme === "crystals") {
         // Crystal Spikes
         ctx.fillStyle = color;

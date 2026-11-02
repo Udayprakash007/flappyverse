@@ -6,8 +6,9 @@ import Navbar from "../../components/Navbar";
 import GameCanvas from "../../components/GameCanvas";
 import QRCodeModal from "../../components/QRCodeModal";
 import { Game, GameDifficulty, BackgroundTheme, BackgroundEffect, ObstacleTheme, CharacterShape } from "../../lib/types";
-import { saveGame, getGameByIdOrSlug, DEFAULT_AVATARS } from "../../lib/storage";
+import { saveGame, getGameByIdOrSlug, DEFAULT_AVATARS, DEFAULT_OBSTACLES } from "../../lib/storage";
 import { VoiceRecorder } from "../../lib/audioEngine";
+import { processImageFile, removeColorBackground } from "../../lib/imageProcessor";
 import {
   Upload,
   Camera,
@@ -21,9 +22,12 @@ import {
   Settings,
   Image as ImageIcon,
   Sliders,
-  ShieldAlert,
   CheckCircle2,
   Trash2,
+  Wand2,
+  ImagePlus,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
 
 function StudioContent() {
@@ -33,6 +37,15 @@ function StudioContent() {
 
   // Tabs
   const [activeTab, setActiveTab] = useState<"character" | "background" | "sounds" | "obstacles" | "physics">("character");
+
+  // File Input Refs for direct click reliability
+  const characterFileRef = useRef<HTMLInputElement | null>(null);
+  const bgFileRef = useRef<HTMLInputElement | null>(null);
+  const obstacleFileRef = useRef<HTMLInputElement | null>(null);
+
+  // Upload & processing state
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
 
   // Camera State
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -45,7 +58,7 @@ function StudioContent() {
   const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // QR Modal
+  // QR Modal & Origin
   const [showShareModal, setShowShareModal] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -128,21 +141,51 @@ function StudioContent() {
     };
   }, []);
 
-  // Character Image Upload Handler
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Character Image Upload Handler (Compressed & High-Speed)
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      try {
+        setIsUploading(true);
+        const dataUrl = await processImageFile(file, 600);
         setGame((prev) => ({
           ...prev,
           character: {
             ...prev.character,
-            imageUrl: reader.result as string,
+            imageUrl: dataUrl,
           },
         }));
-      };
-      reader.readAsDataURL(file);
+        setUploadSuccessMsg("Character photo uploaded successfully!");
+        setTimeout(() => setUploadSuccessMsg(null), 3000);
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Failed to upload image. Please try a different photo.");
+      } finally {
+        setIsUploading(false);
+        e.target.value = "";
+      }
+    }
+  };
+
+  // Background Removal Tool for Character
+  const handleRemoveBackground = async () => {
+    if (!game.character.imageUrl) return;
+    try {
+      setIsUploading(true);
+      // Remove white/light background with default tolerance
+      const transparentUrl = await removeColorBackground(game.character.imageUrl, { r: 255, g: 255, b: 255 }, 45);
+      setGame((prev) => ({
+        ...prev,
+        character: {
+          ...prev.character,
+          imageUrl: transparentUrl,
+        },
+      }));
+      setUploadSuccessMsg("Background color removed!");
+      setTimeout(() => setUploadSuccessMsg(null), 3000);
+    } catch {
+      alert("Unable to process background removal on this image.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -159,7 +202,7 @@ function StudioContent() {
         videoRef.current.play();
       }
     } catch {
-      alert("Camera access denied or unavailable.");
+      alert("Camera access was denied or is unavailable on this device.");
       setIsCameraActive(false);
     }
   };
@@ -179,7 +222,7 @@ function StudioContent() {
     const startY = (video.videoHeight - minDim) / 2;
 
     ctx.drawImage(video, startX, startY, minDim, minDim, 0, 0, 400, 400);
-    const photoUrl = canvas.toDataURL("image/png");
+    const photoUrl = canvas.toDataURL("image/png", 0.92);
 
     setGame((prev) => ({
       ...prev,
@@ -189,28 +232,61 @@ function StudioContent() {
       },
     }));
 
-    // Stop stream
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
     }
     setIsCameraActive(false);
+    setUploadSuccessMsg("Selfie photo captured!");
+    setTimeout(() => setUploadSuccessMsg(null), 3000);
   };
 
   // Background Image Upload Handler
-  const handleBgUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      try {
+        setIsUploading(true);
+        const dataUrl = await processImageFile(file, 800);
         setGame((prev) => ({
           ...prev,
           background: {
             ...prev.background,
-            customImageUrl: reader.result as string,
+            customImageUrl: dataUrl,
           },
         }));
-      };
-      reader.readAsDataURL(file);
+        setUploadSuccessMsg("Background photo uploaded successfully!");
+        setTimeout(() => setUploadSuccessMsg(null), 3000);
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Failed to upload background image.");
+      } finally {
+        setIsUploading(false);
+        e.target.value = "";
+      }
+    }
+  };
+
+  // Obstacle Image Upload Handler
+  const handleObstacleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        setIsUploading(true);
+        const dataUrl = await processImageFile(file, 400);
+        setGame((prev) => ({
+          ...prev,
+          obstacles: {
+            ...prev.obstacles,
+            customImageUrl: dataUrl,
+          },
+        }));
+        setUploadSuccessMsg("Custom obstacle image loaded!");
+        setTimeout(() => setUploadSuccessMsg(null), 3000);
+      } catch (err: unknown) {
+        alert(err instanceof Error ? err.message : "Failed to upload obstacle image.");
+      } finally {
+        setIsUploading(false);
+        e.target.value = "";
+      }
     }
   };
 
@@ -227,8 +303,11 @@ function StudioContent() {
             [slot]: reader.result as string,
           },
         }));
+        setUploadSuccessMsg("Audio file uploaded!");
+        setTimeout(() => setUploadSuccessMsg(null), 3000);
       };
       reader.readAsDataURL(file);
+      e.target.value = "";
     }
   };
 
@@ -260,6 +339,8 @@ function StudioContent() {
           [slot]: dataUrl,
         },
       }));
+      setUploadSuccessMsg("Voice clip recorded and attached!");
+      setTimeout(() => setUploadSuccessMsg(null), 3000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -323,6 +404,22 @@ function StudioContent() {
     <div className="min-h-screen bg-[#060618] text-slate-100 flex flex-col">
       <Navbar />
 
+      {/* Upload Success Toast Alert */}
+      {uploadSuccessMsg && (
+        <div className="fixed top-20 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white font-bold text-xs rounded-xl shadow-2xl animate-bounce">
+          <CheckCircle2 className="w-4 h-4" />
+          {uploadSuccessMsg}
+        </div>
+      )}
+
+      {/* Loading Overlay */}
+      {isUploading && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white">
+          <Loader2 className="w-12 h-12 text-cyan-400 animate-spin mb-3" />
+          <p className="font-bold text-sm tracking-wider text-cyan-300">OPTIMIZING MEDIA...</p>
+        </div>
+      )}
+
       {/* Studio Banner & Top Control */}
       <div className="border-b border-purple-900/30 bg-[#090924] py-4 px-4 sm:px-8">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -383,7 +480,7 @@ function StudioContent() {
               { id: "character", label: "Character Photo", icon: Camera },
               { id: "background", label: "Background", icon: ImageIcon },
               { id: "sounds", label: "Voice & Sounds", icon: Volume2 },
-              { id: "obstacles", label: "Obstacles", icon: Sliders },
+              { id: "obstacles", label: "Obstacles & Media", icon: Sliders },
               { id: "physics", label: "Physics & Speed", icon: Settings },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -418,33 +515,96 @@ function StudioContent() {
                 </p>
               </div>
 
-              {/* Upload & Camera Buttons */}
+              {/* Current Character Active Card */}
+              <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-slate-900/90 border border-cyan-500/30 rounded-2xl gap-4 shadow-inner">
+                <div className="flex items-center gap-4">
+                  <div
+                    className="relative w-20 h-20 rounded-full overflow-hidden p-1 shadow-lg shrink-0"
+                    style={{
+                      border: `3px solid ${game.character.glowColor || "#00f0ff"}`,
+                      boxShadow: `0 0 20px ${game.character.glowColor || "#00f0ff"}66`,
+                    }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={game.character.imageUrl}
+                      alt="Active Character"
+                      className="w-full h-full object-cover rounded-full bg-slate-950"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/40">
+                      ✓ Active Hero Character
+                    </span>
+                    <h4 className="font-black text-base text-slate-100 mt-1">
+                      {game.character.name || "Hero"}
+                    </h4>
+                    <p className="text-xs text-slate-400">Scale: {game.character.scale}x • Shape: {game.character.shape}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    onClick={handleRemoveBackground}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-purple-300 text-xs font-bold rounded-xl transition-all"
+                    title="Make white/solid backgrounds transparent"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Auto Cutout / Remove BG
+                  </button>
+                  <button
+                    onClick={() =>
+                      setGame((prev) => ({
+                        ...prev,
+                        character: { ...prev.character, imageUrl: DEFAULT_AVATARS.cyberHero },
+                      }))
+                    }
+                    className="p-2 text-slate-400 hover:text-red-400 rounded-xl hover:bg-slate-800 transition-colors"
+                    title="Reset to default cyber avatar"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Upload & Camera Trigger Buttons */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="flex flex-col items-center justify-center p-6 bg-slate-900/80 hover:bg-slate-800/80 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-xl cursor-pointer transition-all group">
+                <button
+                  type="button"
+                  onClick={() => characterFileRef.current?.click()}
+                  className="flex flex-col items-center justify-center p-6 bg-slate-900/80 hover:bg-slate-800/80 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-xl cursor-pointer transition-all group"
+                >
                   <Upload className="w-8 h-8 text-cyan-400 group-hover:scale-110 transition-transform mb-2" />
                   <span className="font-bold text-sm text-cyan-300">Upload Photo</span>
-                  <span className="text-xs text-slate-400 mt-1">From Phone Gallery or PC</span>
-                  <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                </label>
+                  <span className="text-xs text-slate-400 mt-1">Select from Phone Gallery or PC</span>
+                </button>
+                <input
+                  ref={characterFileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="hidden"
+                />
 
                 <button
+                  type="button"
                   onClick={startCamera}
                   className="flex flex-col items-center justify-center p-6 bg-slate-900/80 hover:bg-slate-800/80 border-2 border-dashed border-pink-500/40 hover:border-pink-400 rounded-xl transition-all group"
                 >
                   <Camera className="w-8 h-8 text-pink-400 group-hover:scale-110 transition-transform mb-2" />
                   <span className="font-bold text-sm text-pink-300">Take Photo</span>
-                  <span className="text-xs text-slate-400 mt-1">Use Device Camera</span>
+                  <span className="text-xs text-slate-400 mt-1">Use Device Camera / Selfie</span>
                 </button>
               </div>
 
               {/* Camera Live Viewfinder */}
               {isCameraActive && (
                 <div className="p-4 bg-slate-950 border border-pink-500/50 rounded-xl flex flex-col items-center gap-3">
-                  <video ref={videoRef} autoPlay playsInline className="w-64 h-64 object-cover rounded-full border-4 border-pink-500" />
+                  <video ref={videoRef} autoPlay playsInline className="w-64 h-64 object-cover rounded-full border-4 border-pink-500 shadow-2xl" />
                   <div className="flex gap-3">
                     <button
                       onClick={captureCameraPhoto}
-                      className="px-5 py-2 bg-pink-500 hover:bg-pink-400 text-white font-bold text-sm rounded-full shadow-lg"
+                      className="px-5 py-2 bg-pink-500 hover:bg-pink-400 text-white font-bold text-sm rounded-full shadow-lg transition-transform active:scale-95"
                     >
                       📸 Snap Photo
                     </button>
@@ -559,16 +719,34 @@ function StudioContent() {
               </div>
 
               {/* Upload Custom Background */}
-              <label className="flex flex-col items-center justify-center p-6 bg-slate-900/80 hover:bg-slate-800/80 border-2 border-dashed border-purple-500/40 hover:border-purple-400 rounded-xl cursor-pointer transition-all group">
+              <button
+                type="button"
+                onClick={() => bgFileRef.current?.click()}
+                className="w-full flex flex-col items-center justify-center p-6 bg-slate-900/80 hover:bg-slate-800/80 border-2 border-dashed border-purple-500/40 hover:border-purple-400 rounded-xl cursor-pointer transition-all group"
+              >
                 <Upload className="w-8 h-8 text-purple-400 group-hover:scale-110 transition-transform mb-2" />
                 <span className="font-bold text-sm text-purple-300">Upload Custom Background Image</span>
                 <span className="text-xs text-slate-400 mt-1">Photos of your room, city, vacation, etc.</span>
-                <input type="file" accept="image/*" onChange={handleBgUpload} className="hidden" />
-              </label>
+              </button>
+              <input
+                ref={bgFileRef}
+                type="file"
+                accept="image/*"
+                onChange={handleBgUpload}
+                className="hidden"
+              />
 
               {game.background.customImageUrl && (
                 <div className="flex items-center justify-between p-3 bg-purple-950/40 border border-purple-500/30 rounded-xl">
-                  <span className="text-xs font-semibold text-purple-300">✓ Custom Image Active</span>
+                  <div className="flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={game.background.customImageUrl}
+                      alt="Custom Background"
+                      className="w-14 h-10 object-cover rounded-lg border border-purple-400"
+                    />
+                    <span className="text-xs font-semibold text-purple-300">✓ Custom Background Active</span>
+                  </div>
                   <button
                     onClick={() => setGame((prev) => ({ ...prev, background: { ...prev.background, customImageUrl: undefined } }))}
                     className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1 font-bold"
@@ -799,54 +977,154 @@ function StudioContent() {
             </div>
           )}
 
-          {/* TAB 4: OBSTACLE STUDIO */}
+          {/* TAB 4: OBSTACLE STUDIO (CUSTOM MEDIA & PILLARS) */}
           {activeTab === "obstacles" && (
             <div className="bg-[#0a0a2f] border border-cyan-500/20 rounded-2xl p-6 shadow-xl space-y-6 animate-fade-in">
               <div>
                 <h3 className="text-xl font-black text-cyan-400 flex items-center gap-2">
                   <Sliders className="w-5 h-5 text-cyan-400" />
-                  Obstacle Studio: Customize Pillars & Gaps
+                  Obstacle Studio: Custom Media & Image Obstacles!
                 </h3>
                 <p className="text-xs text-slate-300 mt-1">
-                  Design the obstacles your character will fly through.
+                  Keep any image, photo, or meme as the obstacles your character must dodge!
                 </p>
               </div>
 
-              {/* Obstacle Themes */}
-              <div>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">
-                  Pillar Style Theme:
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: "neon", label: "Neon Pillars" },
-                    { id: "crystals", label: "Crystal Spikes" },
-                    { id: "classic", label: "Classic Pipes" },
-                  ].map((theme) => (
+              {/* Custom Image Obstacle Upload Card */}
+              <div className="p-5 bg-slate-900/90 border border-cyan-500/30 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-cyan-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ImagePlus className="w-4 h-4 text-pink-400" />
+                    Keep An Image As Obstacles
+                  </span>
+                  {game.obstacles.customImageUrl && (
+                    <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/40">
+                      ✓ Custom Image Obstacle Active
+                    </span>
+                  )}
+                </div>
+
+                {/* Upload Trigger Button */}
+                <button
+                  type="button"
+                  onClick={() => obstacleFileRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-3 p-5 bg-gradient-to-r from-purple-950/60 to-slate-900 border-2 border-dashed border-cyan-500/40 hover:border-cyan-400 rounded-xl transition-all group cursor-pointer"
+                >
+                  <Upload className="w-6 h-6 text-cyan-400 group-hover:scale-110 transition-transform" />
+                  <div className="text-left">
+                    <span className="block font-bold text-sm text-cyan-300">Upload Your Own Image / Media</span>
+                    <span className="block text-xs text-slate-400">Photos of friends, memes, food, logos, or icons</span>
+                  </div>
+                </button>
+                <input
+                  ref={obstacleFileRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleObstacleUpload}
+                  className="hidden"
+                />
+
+                {/* Preset Obstacle Media Library */}
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                    Or Pick an Obstacle from Media Library:
+                  </label>
+                  <div className="grid grid-cols-5 gap-2.5">
+                    {[
+                      { key: "rocket", label: "Rocket", img: DEFAULT_OBSTACLES.rocket },
+                      { key: "burger", label: "Burger", img: DEFAULT_OBSTACLES.burger },
+                      { key: "crystal", label: "Crystal", img: DEFAULT_OBSTACLES.crystal },
+                      { key: "skull", label: "Skull", img: DEFAULT_OBSTACLES.skull },
+                      { key: "cactus", label: "Cactus", img: DEFAULT_OBSTACLES.cactus },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        onClick={() =>
+                          setGame((prev) => ({
+                            ...prev,
+                            obstacles: { ...prev.obstacles, customImageUrl: item.img },
+                          }))
+                        }
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                          game.obstacles.customImageUrl === item.img
+                            ? "border-cyan-400 bg-cyan-500/20 scale-105 shadow-[0_0_15px_rgba(0,240,255,0.4)]"
+                            : "border-slate-800 bg-slate-900/60 hover:border-slate-700"
+                        }`}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={item.img} alt={item.label} className="w-8 h-8 object-contain mb-1" />
+                        <span className="text-[10px] font-bold text-slate-300">{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Active Obstacle Preview & Reset Button */}
+                {game.obstacles.customImageUrl && (
+                  <div className="flex items-center justify-between p-3 bg-purple-950/40 border border-purple-500/30 rounded-xl">
+                    <div className="flex items-center gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={game.obstacles.customImageUrl}
+                        alt="Active Obstacle"
+                        className="w-10 h-10 object-contain rounded-lg border border-cyan-400 bg-slate-950 p-1"
+                      />
+                      <span className="text-xs font-semibold text-purple-300">
+                        Image is active on all obstacle columns
+                      </span>
+                    </div>
                     <button
-                      key={theme.id}
                       onClick={() =>
                         setGame((prev) => ({
                           ...prev,
-                          obstacles: { ...prev.obstacles, theme: theme.id as ObstacleTheme },
+                          obstacles: { ...prev.obstacles, customImageUrl: undefined },
                         }))
                       }
-                      className={`p-3 rounded-xl border text-center font-bold text-xs transition-all ${
-                        game.obstacles.theme === theme.id
-                          ? "border-cyan-400 bg-cyan-500/20 text-cyan-300"
-                          : "border-slate-800 bg-slate-900 text-slate-400"
-                      }`}
+                      className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1 font-bold"
                     >
-                      {theme.label}
+                      <Trash2 className="w-3.5 h-3.5" /> Revert to Pillars
                     </button>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
+
+              {/* Obstacle Themes & Colors */}
+              {!game.obstacles.customImageUrl && (
+                <div>
+                  <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-3">
+                    Pillar Style Theme:
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: "neon", label: "Neon Pillars" },
+                      { id: "crystals", label: "Crystal Spikes" },
+                      { id: "classic", label: "Classic Pipes" },
+                    ].map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() =>
+                          setGame((prev) => ({
+                            ...prev,
+                            obstacles: { ...prev.obstacles, theme: theme.id as ObstacleTheme },
+                          }))
+                        }
+                        className={`p-3 rounded-xl border text-center font-bold text-xs transition-all ${
+                          game.obstacles.theme === theme.id
+                            ? "border-cyan-400 bg-cyan-500/20 text-cyan-300"
+                            : "border-slate-800 bg-slate-900 text-slate-400"
+                        }`}
+                      >
+                        {theme.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Obstacle Color Picker */}
               <div>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  Pillar Neon Accent Color:
+                  Obstacle Neon Accent Color:
                 </label>
                 <div className="flex gap-3">
                   {["#00f0ff", "#ff007f", "#9d00ff", "#22c55e", "#f59e0b"].map((c) => (
@@ -1037,7 +1315,7 @@ function StudioContent() {
             <GameCanvas game={game} width={380} height={520} />
 
             <p className="text-xs text-slate-400 mt-3 text-center max-w-xs">
-              Test your game directly right here! Tap or press Space to verify character size, sounds, and difficulty.
+              Test your game directly right here! Tap or press Space to verify character size, sounds, and custom obstacles.
             </p>
           </div>
         </div>

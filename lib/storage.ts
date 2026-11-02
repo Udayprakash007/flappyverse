@@ -12,6 +12,15 @@ export const DEFAULT_AVATARS = {
   retroGamer: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="%2300e5ff" stroke="%23ff007f" stroke-width="4"/><rect x="22" y="36" width="56" height="18" rx="6" fill="%231a1a2e" stroke="%23ff007f" stroke-width="2"/><circle cx="36" cy="45" r="5" fill="%23ff007f"/><circle cx="64" cy="45" r="5" fill="%23ff007f"/><path d="M 38 70 Q 50 80 62 70" fill="none" stroke="%23ffffff" stroke-width="4" stroke-linecap="round"/></svg>`,
 };
 
+// Preset Obstacle Media Library
+export const DEFAULT_OBSTACLES = {
+  rocket: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,5 30,70 70,70" fill="%23ff0055"/><rect x="40" y="30" width="20" height="40" fill="%23ffffff"/><circle cx="50" cy="45" r="6" fill="%2300f0ff"/><polygon points="20,70 30,55 30,75" fill="%239d00ff"/><polygon points="80,70 70,55 70,75" fill="%239d00ff"/><polygon points="40,75 50,95 60,75" fill="%23ffbb00"/></svg>`,
+  burger: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M 20 40 Q 50 15 80 40 Z" fill="%23e69138"/><rect x="22" y="44" width="56" height="8" rx="3" fill="%237cb342"/><rect x="20" y="54" width="60" height="12" rx="4" fill="%235d4037"/><path d="M 20 68 Q 50 85 80 68 Z" fill="%23e69138"/><circle cx="35" cy="30" r="2" fill="%23fff"/><circle cx="50" cy="26" r="2" fill="%23fff"/><circle cx="65" cy="30" r="2" fill="%23fff"/></svg>`,
+  crystal: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,10 80,45 65,90 35,90 20,45" fill="%2300f0ff" stroke="%23ffffff" stroke-width="2"/><polygon points="50,10 40,45 50,90 60,45" fill="%2300b0ff"/><polygon points="20,45 40,45 35,90" fill="%230070ba"/><polygon points="80,45 60,45 65,90" fill="%2380ffff"/></svg>`,
+  skull: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M 25 45 C 25 20, 75 20, 75 45 C 75 60, 68 65, 68 80 L 32 80 C 32 65, 25 60, 25 45 Z" fill="%23f1f5f9"/><circle cx="38" cy="48" r="9" fill="%230f172a"/><circle cx="62" cy="48" r="9" fill="%230f172a"/><polygon points="50,56 46,65 54,65" fill="%230f172a"/><rect x="38" y="73" width="5" height="10" fill="%230f172a"/><rect x="47" y="73" width="6" height="10" fill="%230f172a"/><rect x="57" y="73" width="5" height="10" fill="%230f172a"/></svg>`,
+  cactus: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="42" y="15" width="16" height="75" rx="8" fill="%2322c55e"/><path d="M 22 35 L 22 55 L 42 55" fill="none" stroke="%2322c55e" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/><path d="M 78 45 L 78 65 L 58 65" fill="none" stroke="%2322c55e" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+};
+
 // Seed / Initial community showcase games
 const SEED_GAMES: Game[] = [
   {
