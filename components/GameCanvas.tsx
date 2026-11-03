@@ -47,6 +47,7 @@ export default function GameCanvas({
   const frameRef = useRef<number>(0);
   const scoreRef = useRef<number>(0);
   const gameStateRef = useRef<"START" | "PLAYING" | "PAUSED" | "GAMEOVER">("START");
+  const lastFlapTimeRef = useRef<number>(0);
 
   useEffect(() => {
     gameStateRef.current = gameState;
@@ -76,21 +77,31 @@ export default function GameCanvas({
     }
   }, [game.sounds]);
 
-  // Flap / Jump Trigger
+  // Flap / Jump Trigger - Simultaneous sound & physics response
   const triggerFlap = useCallback(() => {
+    const now = performance.now();
+    // Debounce duplicate events (e.g. pointerdown followed by synthesized click within 60ms)
+    if (now - lastFlapTimeRef.current < 60) return;
+    lastFlapTimeRef.current = now;
+
     const audio = audioRef.current;
     const sounds = game.sounds;
     const physics = game.physics;
+
+    // Eagerly wake up audio context if suspended
+    audio?.resume();
 
     if (gameStateRef.current === "START") {
       setGameState("PLAYING");
       gameStateRef.current = "PLAYING";
       setIsNewRecord(false);
       birdRef.current.vy = -(physics.jumpForce || 6.8);
+      // Synchronous simultaneous flap sound
       audio?.playJump(sounds.jumpUrl, sounds.jumpPreset);
       audio?.startBgMusic(sounds.bgMusicUrl);
     } else if (gameStateRef.current === "PLAYING") {
       birdRef.current.vy = -(physics.jumpForce || 6.8);
+      // Synchronous simultaneous flap sound
       audio?.playJump(sounds.jumpUrl, sounds.jumpPreset);
 
       // Flap particle burst
@@ -126,6 +137,7 @@ export default function GameCanvas({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
+        if (e.repeat) return; // Prevent key repeat lag / sound barrage
         triggerFlap();
       } else if (e.code === "KeyP") {
         setGameState((prev) => (prev === "PLAYING" ? "PAUSED" : prev === "PAUSED" ? "PLAYING" : prev));
@@ -186,9 +198,13 @@ export default function GameCanvas({
         // Ground / Ceiling Collision
         const radius = 18 * (game.character.scale || 1.0);
         if (bird.y + radius >= height - 20 || bird.y - radius <= 0) {
+          // Instant simultaneous impact sound
           audio?.playCollision(sounds.collisionUrl, sounds.collisionPreset);
-          audio?.playGameOver(sounds.gameoverUrl, sounds.gameoverPreset);
           audio?.stopBgMusic();
+          // Schedule game over tune with subtle 160ms delay so collision impact is distinct
+          setTimeout(() => {
+            audio?.playGameOver(sounds.gameoverUrl, sounds.gameoverPreset);
+          }, 160);
           setGameState("GAMEOVER");
           gameStateRef.current = "GAMEOVER";
           if (onGameOver) onGameOver(scoreRef.current);
@@ -243,9 +259,12 @@ export default function GameCanvas({
           const inBtm = bird.y + radius > pipe.bottomY;
 
           if (inX && (inTop || inBtm)) {
+            // Instant simultaneous impact sound
             audio?.playCollision(sounds.collisionUrl, sounds.collisionPreset);
-            audio?.playGameOver(sounds.gameoverUrl, sounds.gameoverPreset);
             audio?.stopBgMusic();
+            setTimeout(() => {
+              audio?.playGameOver(sounds.gameoverUrl, sounds.gameoverPreset);
+            }, 160);
             setGameState("GAMEOVER");
             gameStateRef.current = "GAMEOVER";
             if (onGameOver) onGameOver(scoreRef.current);
@@ -308,7 +327,10 @@ export default function GameCanvas({
           ref={canvasRef}
           width={width}
           height={height}
-          onClick={triggerFlap}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            triggerFlap();
+          }}
           className="rounded-xl cursor-pointer block touch-none"
           style={{ width: `${width}px`, height: `${height}px`, maxWidth: "100%" }}
         />
@@ -316,6 +338,7 @@ export default function GameCanvas({
         {/* Top Control Bar */}
         <div className="absolute top-3 right-3 flex items-center gap-2">
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleMute}
             className="p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
             title={isMuted ? "Unmute" : "Mute"}
@@ -323,6 +346,7 @@ export default function GameCanvas({
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
           <button
+            onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleFullscreen}
             className="p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-purple-300 border border-purple-500/30 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
             title="Fullscreen"
@@ -334,7 +358,10 @@ export default function GameCanvas({
         {/* START OVERLAY */}
         {gameState === "START" && (
           <div
-            onClick={triggerFlap}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              triggerFlap();
+            }}
             className="absolute inset-0 bg-slate-950/65 backdrop-blur-xs flex flex-col items-center justify-center p-6 rounded-xl cursor-pointer text-center animate-fade-in"
           >
             <div className="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-3xl mb-3 shadow-[0_0_30px_rgba(0,240,255,0.6)] animate-pulse">
@@ -356,7 +383,10 @@ export default function GameCanvas({
         {/* GAMEOVER OVERLAY */}
         {gameState === "GAMEOVER" && (
           <div
-            onClick={triggerFlap}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              triggerFlap();
+            }}
             className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 rounded-xl cursor-pointer text-center animate-fade-in"
           >
             <h2 className="text-3xl font-black text-pink-500 drop-shadow-[0_0_20px_rgba(255,0,127,0.8)] mb-3">
@@ -387,7 +417,10 @@ export default function GameCanvas({
 
       {/* On-Screen Mobile Jump Button */}
       <button
-        onClick={triggerFlap}
+        onPointerDown={(e) => {
+          e.preventDefault();
+          triggerFlap();
+        }}
         className="mt-4 sm:hidden w-full max-w-xs py-3.5 bg-gradient-to-r from-cyan-600/40 to-purple-600/40 hover:from-cyan-600/60 hover:to-purple-600/60 border border-cyan-400/50 rounded-2xl font-black tracking-widest text-cyan-300 shadow-lg active:scale-95 transition-all text-sm"
       >
         TAP TO JUMP ⚡

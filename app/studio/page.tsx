@@ -8,7 +8,7 @@ import QRCodeModal from "../../components/QRCodeModal";
 import ImageCropModal from "../../components/ImageCropModal";
 import { Game, GameDifficulty, BackgroundTheme, BackgroundEffect, ObstacleTheme, CharacterShape } from "../../lib/types";
 import { saveGame, getGameByIdOrSlug, DEFAULT_AVATARS, DEFAULT_OBSTACLES } from "../../lib/storage";
-import { VoiceRecorder } from "../../lib/audioEngine";
+import { VoiceRecorder, AudioEngine } from "../../lib/audioEngine";
 import { processImageFile, removeColorBackground } from "../../lib/imageProcessor";
 import {
   Upload,
@@ -59,6 +59,13 @@ function StudioContent() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const voiceRecorderRef = useRef<VoiceRecorder | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const studioAudioRef = useRef<AudioEngine | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && !studioAudioRef.current) {
+      studioAudioRef.current = new AudioEngine();
+    }
+  }, []);
 
   // QR Modal & Origin
   const [showShareModal, setShowShareModal] = useState(false);
@@ -380,12 +387,24 @@ function StudioContent() {
     }
   };
 
-  // Test Sound Player
+  // Zero-latency Sound Player for Studio Preview
   const playSoundPreview = (url?: string) => {
-    if (!url) return;
-    const a = new Audio(url);
-    a.volume = game.sounds.volume || 0.8;
-    a.play().catch(() => {});
+    if (!url || !studioAudioRef.current) return;
+    studioAudioRef.current.setVolume(game.sounds.volume || 0.85);
+    studioAudioRef.current.preloadAudio(url).then((buf) => {
+      if (buf && studioAudioRef.current) {
+        studioAudioRef.current.playBuffer(buf);
+      }
+    });
+  };
+
+  const playPresetPreview = (presetKey: string, presetName: string) => {
+    if (!studioAudioRef.current) return;
+    studioAudioRef.current.setVolume(game.sounds.volume || 0.85);
+    if (presetKey === "jumpPreset") studioAudioRef.current.playJump(undefined, presetName);
+    else if (presetKey === "collisionPreset") studioAudioRef.current.playCollision(undefined, presetName);
+    else if (presetKey === "scorePreset") studioAudioRef.current.playScore(undefined, presetName);
+    else if (presetKey === "gameoverPreset") studioAudioRef.current.playGameOver(undefined, presetName);
   };
 
   // Preset Difficulty changer
@@ -889,7 +908,7 @@ function StudioContent() {
                   desc: "Record a funny 'Wheee!', 'Boing!', or whistle",
                   url: game.sounds.jumpUrl,
                   presetKey: "jumpPreset",
-                  presets: ["boing", "laser", "wheee", "pop"],
+                  presets: ["boing", "flappy", "laser", "wheee", "pop"],
                 },
                 {
                   id: "collisionUrl",
@@ -992,6 +1011,38 @@ function StudioContent() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       )}
+                    </div>
+
+                    {/* Built-in Preset Sounds with Instant Preview */}
+                    <div className="pt-2 border-t border-slate-800/80 flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-bold text-slate-400 mr-1">Presets:</span>
+                      {slot.presets.map((presetName) => {
+                        const currentPreset = game.sounds[slot.presetKey as keyof typeof game.sounds];
+                        const isSelected = currentPreset === presetName;
+                        return (
+                          <button
+                            key={presetName}
+                            type="button"
+                            onClick={() => {
+                              setGame((prev) => ({
+                                ...prev,
+                                sounds: {
+                                  ...prev.sounds,
+                                  [slot.presetKey]: presetName,
+                                },
+                              }));
+                              playPresetPreview(slot.presetKey, presetName);
+                            }}
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-md border transition-all ${
+                              isSelected
+                                ? "bg-cyan-500/20 text-cyan-300 border-cyan-400 shadow-[0_0_10px_rgba(0,240,255,0.3)]"
+                                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:border-slate-500"
+                            }`}
+                          >
+                            {isSelected ? "▶ " : ""}{presetName}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 );
