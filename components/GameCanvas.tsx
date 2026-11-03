@@ -56,14 +56,25 @@ export default function GameCanvas({
     setBestScore(game.highScore || 0);
   }, [game.highScore]);
 
-  // Initialize Audio & Renderer
+  // Initialize Audio & Renderer and preload sounds for 0ms latency
   useEffect(() => {
     if (typeof window !== "undefined") {
-      audioRef.current = new AudioEngine();
-      audioRef.current.setVolume(game.sounds.volume || 0.8);
-      rendererRef.current = new GameRenderer();
+      if (!audioRef.current) {
+        audioRef.current = new AudioEngine();
+      }
+      audioRef.current.setVolume(game.sounds.volume || 0.85);
+
+      // Preload and decode custom audio buffers in advance
+      if (game.sounds.jumpUrl) audioRef.current.preloadAudio(game.sounds.jumpUrl);
+      if (game.sounds.scoreUrl) audioRef.current.preloadAudio(game.sounds.scoreUrl);
+      if (game.sounds.collisionUrl) audioRef.current.preloadAudio(game.sounds.collisionUrl);
+      if (game.sounds.gameoverUrl) audioRef.current.preloadAudio(game.sounds.gameoverUrl);
+
+      if (!rendererRef.current) {
+        rendererRef.current = new GameRenderer();
+      }
     }
-  }, [game.sounds.volume]);
+  }, [game.sounds]);
 
   // Flap / Jump Trigger
   const triggerFlap = useCallback(() => {

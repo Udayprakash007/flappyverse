@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../../components/Navbar";
 import GameCanvas from "../../components/GameCanvas";
 import QRCodeModal from "../../components/QRCodeModal";
+import ImageCropModal from "../../components/ImageCropModal";
 import { Game, GameDifficulty, BackgroundTheme, BackgroundEffect, ObstacleTheme, CharacterShape } from "../../lib/types";
 import { saveGame, getGameByIdOrSlug, DEFAULT_AVATARS, DEFAULT_OBSTACLES } from "../../lib/storage";
 import { VoiceRecorder } from "../../lib/audioEngine";
@@ -28,6 +29,7 @@ import {
   ImagePlus,
   Loader2,
   RefreshCw,
+  Crop,
 } from "lucide-react";
 
 function StudioContent() {
@@ -62,6 +64,11 @@ function StudioContent() {
   const [showShareModal, setShowShareModal] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [origin, setOrigin] = useState("");
+
+  // Crop Modal State
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string>("");
+  const [cropTarget, setCropTarget] = useState<"obstacle" | "character">("obstacle");
 
   // Current Game State with deterministic initial values for SSR
   const [game, setGame] = useState<Game>({
@@ -265,13 +272,13 @@ function StudioContent() {
     }
   };
 
-  // Obstacle Image Upload Handler
+  // Obstacle Image Upload Handler - opens cropper immediately for exact pillar fitting
   const handleObstacleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       try {
         setIsUploading(true);
-        const dataUrl = await processImageFile(file, 400);
+        const dataUrl = await processImageFile(file, 800);
         setGame((prev) => ({
           ...prev,
           obstacles: {
@@ -279,8 +286,9 @@ function StudioContent() {
             customImageUrl: dataUrl,
           },
         }));
-        setUploadSuccessMsg("Custom obstacle image loaded!");
-        setTimeout(() => setUploadSuccessMsg(null), 3000);
+        setImageToCrop(dataUrl);
+        setCropTarget("obstacle");
+        setCropModalOpen(true);
       } catch (err: unknown) {
         alert(err instanceof Error ? err.message : "Failed to upload obstacle image.");
       } finally {
@@ -288,6 +296,29 @@ function StudioContent() {
         e.target.value = "";
       }
     }
+  };
+
+  const handleCropComplete = (croppedUrl: string) => {
+    if (cropTarget === "obstacle") {
+      setGame((prev) => ({
+        ...prev,
+        obstacles: {
+          ...prev.obstacles,
+          customImageUrl: croppedUrl,
+        },
+      }));
+      setUploadSuccessMsg("Obstacle image cropped & applied as full pillar!");
+    } else {
+      setGame((prev) => ({
+        ...prev,
+        character: {
+          ...prev.character,
+          imageUrl: croppedUrl,
+        },
+      }));
+      setUploadSuccessMsg("Character photo cropped and applied!");
+    }
+    setTimeout(() => setUploadSuccessMsg(null), 3000);
   };
 
   // Sound File Upload Handler
@@ -544,6 +575,19 @@ function StudioContent() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    onClick={() => {
+                      if (game.character.imageUrl) {
+                        setImageToCrop(game.character.imageUrl);
+                        setCropTarget("character");
+                        setCropModalOpen(true);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/50 text-cyan-300 text-xs font-bold rounded-xl transition-all"
+                  >
+                    <Crop className="w-3.5 h-3.5" />
+                    Crop Photo
+                  </button>
                   <button
                     onClick={handleRemoveBackground}
                     className="flex items-center gap-1.5 px-3 py-2 bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/50 text-purple-300 text-xs font-bold rounded-xl transition-all"
@@ -1073,17 +1117,34 @@ function StudioContent() {
                         Image is active on all obstacle columns
                       </span>
                     </div>
-                    <button
-                      onClick={() =>
-                        setGame((prev) => ({
-                          ...prev,
-                          obstacles: { ...prev.obstacles, customImageUrl: undefined },
-                        }))
-                      }
-                      className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1 font-bold"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Revert to Pillars
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (game.obstacles.customImageUrl) {
+                            setImageToCrop(game.obstacles.customImageUrl);
+                            setCropTarget("obstacle");
+                            setCropModalOpen(true);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 text-cyan-300 text-xs font-bold rounded-lg transition-all"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                        Crop / Adjust
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setGame((prev) => ({
+                            ...prev,
+                            obstacles: { ...prev.obstacles, customImageUrl: undefined },
+                          }))
+                        }
+                        className="text-xs text-pink-400 hover:text-pink-300 flex items-center gap-1 font-bold"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Revert
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1327,6 +1388,16 @@ function StudioContent() {
         onClose={() => setShowShareModal(false)}
         gameTitle={game.title}
         shareUrl={shareUrl}
+      />
+
+      {/* Image Crop Modal */}
+      <ImageCropModal
+        isOpen={cropModalOpen}
+        onClose={() => setCropModalOpen(false)}
+        imageUrl={imageToCrop}
+        onCropComplete={handleCropComplete}
+        title={cropTarget === "obstacle" ? "Crop Obstacle Pillar Image" : "Crop Character Photo"}
+        defaultAspect={cropTarget === "obstacle" ? "pillar" : "square"}
       />
     </div>
   );
