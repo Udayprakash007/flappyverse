@@ -402,17 +402,18 @@ export class GameRenderer {
     });
   }
 
-  // Draw the customized character with user photo, rotation, and wing flapping
+  // Draw the customized character with user photo, rotation, and wing flapping (Clean rendering, no neon border)
   drawCharacter(
     ctx: CanvasRenderingContext2D,
     x: number,
     y: number,
     vy: number,
     game: Game,
-    frame: number
+    frame: number,
+    customRadius?: number
   ) {
     const char = game.character;
-    const radius = 18 * (char.scale || 1.0);
+    const radius = customRadius ?? (18 * (char.scale || 1.0));
     const rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, vy * 0.08));
 
     // Load photo if changed
@@ -426,78 +427,68 @@ export class GameRenderer {
     ctx.translate(x, y);
     ctx.rotate(rotation + (char.rotation ? (char.rotation * Math.PI) / 180 : 0));
 
-    // 1. Cyber Wing / Thruster Flapping behind character
-    const wingFlap = Math.sin(frame * 0.3) * 6;
-    ctx.fillStyle = char.glowColor || "#00f0ff";
-    ctx.shadowColor = char.glowColor || "#00f0ff";
-    ctx.shadowBlur = 10;
+    // Clean aerodynamic wing flapping behind character (no neon blur)
+    const wingFlap = Math.sin(frame * 0.3) * 5;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.75)";
     ctx.beginPath();
     ctx.moveTo(-radius * 0.4, 0);
-    ctx.lineTo(-radius * 1.3, -radius * 0.5 + wingFlap);
-    ctx.lineTo(-radius * 0.7, radius * 0.6);
+    ctx.lineTo(-radius * 1.25, -radius * 0.4 + wingFlap);
+    ctx.lineTo(-radius * 0.65, radius * 0.5);
     ctx.closePath();
     ctx.fill();
 
-    // 2. Character Photo or Avatar
-    if (this.characterImg && this.characterImg.complete && this.characterImg.naturalWidth > 0) {
-      ctx.shadowColor = char.glowColor || "#00f0ff";
-      ctx.shadowBlur = 14;
+    // Zero neon glow or border ring
+    ctx.shadowBlur = 0;
 
+    // Character Photo or Avatar
+    if (this.characterImg && this.characterImg.complete && this.characterImg.naturalWidth > 0) {
       if (char.shape === "circle" || char.shape === "neon-glow") {
-        // Circular mask with glowing ring
+        // Circular mask with clean edges (no neon ring border)
         ctx.save();
         ctx.beginPath();
         ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.clip();
         ctx.drawImage(this.characterImg, -radius, -radius, radius * 2, radius * 2);
         ctx.restore();
-
-        // Glowing border ring
-        ctx.strokeStyle = char.glowColor || "#00f0ff";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.stroke();
       } else {
-        // Original cropped image
+        // Original cropped image (no border)
         ctx.drawImage(this.characterImg, -radius, -radius, radius * 2, radius * 2);
       }
     } else {
-      // Fallback glowing neon bird
-      ctx.shadowColor = char.glowColor || "#00f0ff";
-      ctx.shadowBlur = 12;
+      // Clean fallback bird
       ctx.fillStyle = "#ffeb3b";
       ctx.beginPath();
       ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Eye
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath();
+      ctx.arc(radius * 0.35, -radius * 0.25, radius * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(radius * 0.4, -radius * 0.28, radius * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Orange Beak
+      ctx.fillStyle = "#f97316";
+      ctx.beginPath();
+      ctx.moveTo(radius * 0.7, -radius * 0.15);
+      ctx.lineTo(radius * 1.35, 0.05);
+      ctx.lineTo(radius * 0.7, radius * 0.25);
+      ctx.closePath();
       ctx.fill();
     }
 
     ctx.restore();
   }
 
-  // Draw particle system
+  // Draw particle system (sparks disabled while flying)
   drawParticles(ctx: CanvasRenderingContext2D, particles: Particle[]) {
-    for (let i = particles.length - 1; i >= 0; i--) {
-      const p = particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.alpha -= 0.025;
-
-      if (p.alpha <= 0) {
-        particles.splice(i, 1);
-        continue;
-      }
-
-      ctx.save();
-      ctx.globalAlpha = p.alpha;
-      ctx.fillStyle = p.color;
-      ctx.shadowColor = p.color;
-      ctx.shadowBlur = 6;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
+    if (particles.length === 0) return;
+    particles.length = 0;
   }
 }
 

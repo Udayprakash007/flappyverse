@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import confetti from "canvas-confetti";
 import { Game } from "../lib/types";
-import { GameRenderer, Particle, PipeItem } from "../lib/gameRenderer";
+import { GameRenderer, PipeItem } from "../lib/gameRenderer";
 import { AudioEngine } from "../lib/audioEngine";
-import { Volume2, VolumeX, Maximize2, RotateCcw } from "lucide-react";
+import { Volume2, VolumeX, Maximize2, Minimize2, RotateCcw } from "lucide-react";
 
 interface GameCanvasProps {
   game: Game;
@@ -31,6 +31,10 @@ export default function GameCanvas({
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isNewRecord, setIsNewRecord] = useState<boolean>(false);
 
+  // Fullscreen & Responsive dimensions
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+  const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width, height });
+
   // Engine refs
   const audioRef = useRef<AudioEngine | null>(null);
   const rendererRef = useRef<GameRenderer | null>(null);
@@ -43,7 +47,6 @@ export default function GameCanvas({
   });
 
   const pipesRef = useRef<PipeItem[]>([]);
-  const particlesRef = useRef<Particle[]>([]);
   const frameRef = useRef<number>(0);
   const scoreRef = useRef<number>(0);
   const gameStateRef = useRef<"START" | "PLAYING" | "PAUSED" | "GAMEOVER">("START");
@@ -57,6 +60,36 @@ export default function GameCanvas({
     setBestScore(game.highScore || 0);
   }, [game.highScore]);
 
+  // Fullscreen change & window resize listener to fit entire screen on maximize
+  useEffect(() => {
+    const handleDimensionChange = () => {
+      const isFs = !!(
+        document.fullscreenElement ||
+        (document as unknown as { webkitFullscreenElement?: Element }).webkitFullscreenElement
+      );
+      setIsFullscreen(isFs);
+
+      if (isFs) {
+        setDimensions({
+          width: window.innerWidth,
+          height: window.innerHeight,
+        });
+      } else {
+        setDimensions({ width, height });
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleDimensionChange);
+    document.addEventListener("webkitfullscreenchange", handleDimensionChange);
+    window.addEventListener("resize", handleDimensionChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleDimensionChange);
+      document.removeEventListener("webkitfullscreenchange", handleDimensionChange);
+      window.removeEventListener("resize", handleDimensionChange);
+    };
+  }, [width, height]);
+
   // Initialize Audio & Renderer and preload sounds for 0ms latency
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -65,7 +98,7 @@ export default function GameCanvas({
       }
       audioRef.current.setVolume(game.sounds.volume || 0.85);
 
-      // Preload and decode custom audio buffers in advance
+      // Preload custom audio buffers
       if (game.sounds.jumpUrl) audioRef.current.preloadAudio(game.sounds.jumpUrl);
       if (game.sounds.scoreUrl) audioRef.current.preloadAudio(game.sounds.scoreUrl);
       if (game.sounds.collisionUrl) audioRef.current.preloadAudio(game.sounds.collisionUrl);
@@ -77,67 +110,60 @@ export default function GameCanvas({
     }
   }, [game.sounds]);
 
-  // Flap / Jump Trigger - Simultaneous sound & physics response
+  // Flap / Jump Trigger - Simultaneous sound & physics response (Sparks removed)
   const triggerFlap = useCallback(() => {
     const now = performance.now();
-    // Debounce duplicate events (e.g. pointerdown followed by synthesized click within 60ms)
-    if (now - lastFlapTimeRef.current < 60) return;
+    // Debounce duplicate events within 55ms
+    if (now - lastFlapTimeRef.current < 55) return;
     lastFlapTimeRef.current = now;
 
     const audio = audioRef.current;
     const sounds = game.sounds;
     const physics = game.physics;
+    const curH = dimensions.height;
+    const curW = dimensions.width;
+    const scaleY = curH / 520;
 
     // Eagerly wake up audio context if suspended
     audio?.resume();
+
+    const jumpVelocity = -(physics.jumpForce || 6.8) * Math.min(1.4, Math.max(0.85, scaleY));
 
     if (gameStateRef.current === "START") {
       setGameState("PLAYING");
       gameStateRef.current = "PLAYING";
       setIsNewRecord(false);
-      birdRef.current.vy = -(physics.jumpForce || 6.8);
-      // Synchronous simultaneous flap sound
+      birdRef.current.x = Math.max(80, Math.round(curW * 0.22));
+      birdRef.current.y = curH / 2;
+      birdRef.current.vy = jumpVelocity;
       audio?.playJump(sounds.jumpUrl, sounds.jumpPreset);
       audio?.startBgMusic(sounds.bgMusicUrl);
     } else if (gameStateRef.current === "PLAYING") {
-      birdRef.current.vy = -(physics.jumpForce || 6.8);
-      // Synchronous simultaneous flap sound
+      birdRef.current.vy = jumpVelocity;
       audio?.playJump(sounds.jumpUrl, sounds.jumpPreset);
-
-      // Flap particle burst
-      particlesRef.current.push({
-        x: birdRef.current.x - 12,
-        y: birdRef.current.y,
-        vx: -Math.random() * 2 - 1,
-        vy: Math.random() * 2 - 1,
-        color: game.character.glowColor || "#00f0ff",
-        alpha: 1,
-        size: Math.random() * 3 + 2,
-        life: 20,
-      });
+      // Neon sparks removed per user request
     } else if (gameStateRef.current === "GAMEOVER") {
       // Reset game
-      birdRef.current.y = height / 2;
-      birdRef.current.vy = 0;
+      birdRef.current.x = Math.max(80, Math.round(curW * 0.22));
+      birdRef.current.y = curH / 2;
+      birdRef.current.vy = jumpVelocity;
       pipesRef.current = [];
-      particlesRef.current = [];
       scoreRef.current = 0;
       setScore(0);
       setIsNewRecord(false);
       setGameState("PLAYING");
       gameStateRef.current = "PLAYING";
-      birdRef.current.vy = -(physics.jumpForce || 6.8);
       audio?.playJump(sounds.jumpUrl, sounds.jumpPreset);
       audio?.startBgMusic(sounds.bgMusicUrl);
     }
-  }, [game.sounds, game.physics, game.character.glowColor, height]);
+  }, [game.sounds, game.physics, dimensions.width, dimensions.height]);
 
   // Keyboard controls
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "ArrowUp") {
         e.preventDefault();
-        if (e.repeat) return; // Prevent key repeat lag / sound barrage
+        if (e.repeat) return; // Prevent key repeat sound lag
         triggerFlap();
       } else if (e.code === "KeyP") {
         setGameState((prev) => (prev === "PLAYING" ? "PAUSED" : prev === "PAUSED" ? "PLAYING" : prev));
@@ -159,6 +185,7 @@ export default function GameCanvas({
   const toggleFullscreen = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!containerRef.current) return;
+
     if (!document.fullscreenElement) {
       containerRef.current.requestFullscreen().catch(() => {});
     } else {
@@ -184,24 +211,30 @@ export default function GameCanvas({
       const renderer = rendererRef.current;
       const audio = audioRef.current;
 
-      // 1. Draw Background
+      const curW = dimensions.width;
+      const curH = dimensions.height;
+      const scaleY = curH / 520;
+      const scaleX = curW / 380;
+
+      // Clean bird radius without artificial neon ring
+      const birdRadius = 18 * (game.character.scale || 1.0) * Math.min(1.4, Math.max(0.85, scaleY));
+
+      // 1. Draw Background (Fills entire screen)
       if (renderer) {
-        renderer.drawBackground(ctx, width, height, game, isPlaying);
+        renderer.drawBackground(ctx, curW, curH, game, isPlaying);
       }
 
       // 2. Game Logic
       if (isPlaying) {
         const bird = birdRef.current;
-        bird.vy += physics.gravity || 0.38;
+        bird.x = Math.max(80, Math.round(curW * 0.22));
+        bird.vy += (physics.gravity || 0.38) * Math.min(1.4, Math.max(0.85, scaleY));
         bird.y += bird.vy;
 
         // Ground / Ceiling Collision
-        const radius = 18 * (game.character.scale || 1.0);
-        if (bird.y + radius >= height - 20 || bird.y - radius <= 0) {
-          // Instant simultaneous impact sound
+        if (bird.y + birdRadius >= curH - 22 || bird.y - birdRadius <= 0) {
           audio?.playCollision(sounds.collisionUrl, sounds.collisionPreset);
           audio?.stopBgMusic();
-          // Schedule game over tune with subtle 160ms delay so collision impact is distinct
           setTimeout(() => {
             audio?.playGameOver(sounds.gameoverUrl, sounds.gameoverPreset);
           }, 160);
@@ -210,15 +243,15 @@ export default function GameCanvas({
           if (onGameOver) onGameOver(scoreRef.current);
         }
 
-        // Spawn Pipes
-        const spacing = obstacles.spacing || 110;
+        // Spawn Pipes with adaptive spacing for fullscreen
+        const spacing = Math.round((obstacles.spacing || 110) * Math.min(1.3, Math.max(0.8, scaleX * 0.75)));
         if (frameRef.current % spacing === 0) {
-          const gap = obstacles.gap || 135;
-          const minPipe = 60;
-          const maxPipe = height - gap - minPipe - 40;
+          const gap = Math.round((obstacles.gap || 135) * Math.min(1.5, Math.max(0.9, scaleY)));
+          const minPipe = Math.round(55 * scaleY);
+          const maxPipe = curH - gap - minPipe - 35;
           const topHeight = Math.floor(Math.random() * (maxPipe - minPipe)) + minPipe;
           pipesRef.current.push({
-            x: width,
+            x: curW,
             topHeight,
             bottomY: topHeight + gap,
             passed: false,
@@ -226,8 +259,8 @@ export default function GameCanvas({
         }
 
         // Move Pipes & Check Collisions
-        const speed = physics.speed || 2.4;
-        const pipeWidth = obstacles.width || 55;
+        const speed = (physics.speed || 2.4) * Math.min(1.8, Math.max(1, scaleX * 0.65 + 0.35));
+        const pipeWidth = Math.round((obstacles.width || 55) * Math.min(1.5, Math.max(1, scaleX * 0.65)));
 
         for (let i = pipesRef.current.length - 1; i >= 0; i--) {
           const pipe = pipesRef.current[i];
@@ -241,7 +274,6 @@ export default function GameCanvas({
             setScore(newScore);
             audio?.playScore(sounds.scoreUrl, sounds.scorePreset);
 
-            // New high score confetti
             if (newScore > bestScore) {
               setBestScore(newScore);
               setIsNewRecord(true);
@@ -254,12 +286,11 @@ export default function GameCanvas({
           }
 
           // Box collision
-          const inX = bird.x + radius > pipe.x && bird.x - radius < pipe.x + pipeWidth;
-          const inTop = bird.y - radius < pipe.topHeight;
-          const inBtm = bird.y + radius > pipe.bottomY;
+          const inX = bird.x + birdRadius > pipe.x && bird.x - birdRadius < pipe.x + pipeWidth;
+          const inTop = bird.y - birdRadius < pipe.topHeight;
+          const inBtm = bird.y + birdRadius > pipe.bottomY;
 
           if (inX && (inTop || inBtm)) {
-            // Instant simultaneous impact sound
             audio?.playCollision(sounds.collisionUrl, sounds.collisionPreset);
             audio?.stopBgMusic();
             setTimeout(() => {
@@ -271,7 +302,7 @@ export default function GameCanvas({
           }
 
           // Offscreen cull
-          if (pipe.x < -pipeWidth - 20) {
+          if (pipe.x < -pipeWidth - 40) {
             pipesRef.current.splice(i, 1);
           }
         }
@@ -279,15 +310,10 @@ export default function GameCanvas({
 
       // 3. Draw Pipes & Obstacles
       if (renderer) {
-        renderer.drawPipes(ctx, pipesRef.current, height, game);
+        renderer.drawPipes(ctx, pipesRef.current, curH, game);
       }
 
-      // 4. Draw Particles
-      if (renderer) {
-        renderer.drawParticles(ctx, particlesRef.current);
-      }
-
-      // 5. Draw Character
+      // 4. Draw Character (Zero neon border, clean photo)
       if (renderer) {
         renderer.drawCharacter(
           ctx,
@@ -295,19 +321,18 @@ export default function GameCanvas({
           birdRef.current.y,
           birdRef.current.vy,
           game,
-          frameRef.current
+          frameRef.current,
+          birdRadius
         );
       }
 
-      // 6. Draw In-Game Score HUD
+      // 5. Draw In-Game Score HUD
       if (isPlaying || gameStateRef.current === "PAUSED") {
-        ctx.font = "bold 34px monospace";
+        const hudSize = Math.round(34 * Math.min(1.4, Math.max(1, scaleY)));
+        ctx.font = `bold ${hudSize}px monospace`;
         ctx.fillStyle = "#ffffff";
-        ctx.shadowColor = game.character.glowColor || "#00f0ff";
-        ctx.shadowBlur = 12;
         ctx.textAlign = "center";
-        ctx.fillText(`${scoreRef.current}`, width / 2, 52);
-        ctx.shadowBlur = 0;
+        ctx.fillText(`${scoreRef.current}`, curW / 2, Math.round(52 * scaleY));
       }
 
       animationId = requestAnimationFrame(render);
@@ -315,32 +340,50 @@ export default function GameCanvas({
 
     animationId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animationId);
-  }, [game, width, height, bestScore, onGameOver]);
+  }, [game, dimensions.width, dimensions.height, bestScore, onGameOver]);
 
   return (
     <div
       ref={containerRef}
-      className={`relative inline-flex flex-col items-center select-none ${className}`}
+      className={`select-none ${
+        isFullscreen
+          ? "fixed inset-0 w-screen h-screen z-50 bg-[#060618] flex items-center justify-center p-0 m-0 overflow-hidden"
+          : `relative inline-flex flex-col items-center ${className}`
+      }`}
     >
-      <div className="relative rounded-2xl p-1 bg-gradient-to-b from-cyan-400/50 via-purple-600/40 to-pink-500/50 shadow-[0_0_40px_rgba(157,0,255,0.35)]">
+      <div
+        className={
+          isFullscreen
+            ? "relative w-full h-full flex items-center justify-center p-0 m-0 bg-[#060618]"
+            : "relative rounded-2xl p-1 bg-gradient-to-b from-cyan-400/50 via-purple-600/40 to-pink-500/50 shadow-[0_0_40px_rgba(157,0,255,0.35)]"
+        }
+      >
         <canvas
           ref={canvasRef}
-          width={width}
-          height={height}
+          width={dimensions.width}
+          height={dimensions.height}
           onPointerDown={(e) => {
             e.preventDefault();
             triggerFlap();
           }}
-          className="rounded-xl cursor-pointer block touch-none"
-          style={{ width: `${width}px`, height: `${height}px`, maxWidth: "100%" }}
+          className={
+            isFullscreen
+              ? "cursor-pointer block touch-none w-full h-full object-cover"
+              : "rounded-xl cursor-pointer block touch-none"
+          }
+          style={{
+            width: isFullscreen ? "100vw" : `${dimensions.width}px`,
+            height: isFullscreen ? "100vh" : `${dimensions.height}px`,
+            display: "block",
+          }}
         />
 
         {/* Top Control Bar */}
-        <div className="absolute top-3 right-3 flex items-center gap-2">
+        <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleMute}
-            className="p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-cyan-400 border border-cyan-500/30 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
+            className="p-2 rounded-full bg-slate-900/85 hover:bg-slate-800 text-cyan-400 border border-cyan-500/40 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
             title={isMuted ? "Unmute" : "Mute"}
           >
             {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -348,10 +391,10 @@ export default function GameCanvas({
           <button
             onPointerDown={(e) => e.stopPropagation()}
             onClick={toggleFullscreen}
-            className="p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-purple-300 border border-purple-500/30 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
-            title="Fullscreen"
+            className="p-2 rounded-full bg-slate-900/85 hover:bg-slate-800 text-purple-300 border border-purple-500/40 backdrop-blur-md shadow-md text-xs transition-transform active:scale-90"
+            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
           >
-            <Maximize2 className="w-4 h-4" />
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
 
@@ -362,19 +405,19 @@ export default function GameCanvas({
               e.preventDefault();
               triggerFlap();
             }}
-            className="absolute inset-0 bg-slate-950/65 backdrop-blur-xs flex flex-col items-center justify-center p-6 rounded-xl cursor-pointer text-center animate-fade-in"
+            className="absolute inset-0 bg-slate-950/70 backdrop-blur-xs flex flex-col items-center justify-center p-6 text-center animate-fade-in z-20 cursor-pointer"
           >
             <div className="w-16 h-16 rounded-full bg-cyan-500/20 border-2 border-cyan-400 flex items-center justify-center text-3xl mb-3 shadow-[0_0_30px_rgba(0,240,255,0.6)] animate-pulse">
               🚀
             </div>
-            <h2 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-pink-400 mb-1">
+            <h2 className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-pink-400 mb-1">
               {game.title}
             </h2>
-            <p className="text-xs text-cyan-300/80 font-medium mb-5">By {game.creatorName}</p>
-            <p className="text-xs text-slate-300 mb-6 max-w-xs">
+            <p className="text-xs sm:text-sm text-cyan-300/80 font-medium mb-5">By {game.creatorName}</p>
+            <p className="text-xs sm:text-sm text-slate-300 mb-6 max-w-xs">
               Press <span className="px-2 py-0.5 bg-cyan-950 border border-cyan-500 rounded text-cyan-400 font-mono">SPACE</span> or <span className="text-cyan-400 font-semibold">TAP</span> to fly!
             </p>
-            <button className="px-7 py-3 bg-gradient-to-r from-pink-500 via-purple-600 to-cyan-500 hover:from-pink-600 hover:to-cyan-600 text-white font-extrabold text-sm rounded-full shadow-[0_0_25px_rgba(255,0,127,0.7)] transition-all transform hover:scale-105 active:scale-95">
+            <button className="px-8 py-3.5 bg-gradient-to-r from-pink-500 via-purple-600 to-cyan-500 hover:from-pink-600 hover:to-cyan-600 text-white font-extrabold text-sm sm:text-base rounded-full shadow-[0_0_25px_rgba(255,0,127,0.7)] transition-all transform hover:scale-105 active:scale-95">
               START GAME
             </button>
           </div>
@@ -387,17 +430,17 @@ export default function GameCanvas({
               e.preventDefault();
               triggerFlap();
             }}
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 rounded-xl cursor-pointer text-center animate-fade-in"
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center animate-fade-in z-20 cursor-pointer"
           >
-            <h2 className="text-3xl font-black text-pink-500 drop-shadow-[0_0_20px_rgba(255,0,127,0.8)] mb-3">
+            <h2 className="text-3xl sm:text-4xl font-black text-pink-500 drop-shadow-[0_0_20px_rgba(255,0,127,0.8)] mb-3">
               GAME OVER
             </h2>
             {isNewRecord && (
-              <span className="text-xs font-bold px-3 py-1 bg-yellow-500/20 text-yellow-300 border border-yellow-400/50 rounded-full mb-3 shadow-md animate-bounce">
+              <span className="text-xs sm:text-sm font-bold px-3 py-1 bg-yellow-500/20 text-yellow-300 border border-yellow-400/50 rounded-full mb-3 shadow-md animate-bounce">
                 🎉 NEW HIGH SCORE!
               </span>
             )}
-            <div className="bg-slate-900/90 border border-purple-500/40 rounded-xl p-4 w-56 mb-6 shadow-2xl">
+            <div className="bg-slate-900/90 border border-purple-500/40 rounded-xl p-4 w-60 mb-6 shadow-2xl">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-slate-400 text-xs font-semibold">SCORE</span>
                 <span className="text-3xl font-black text-cyan-400 font-mono">{score}</span>
@@ -407,7 +450,7 @@ export default function GameCanvas({
                 <span className="text-2xl font-black text-yellow-400 font-mono">{bestScore}</span>
               </div>
             </div>
-            <button className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm rounded-full shadow-[0_0_25px_rgba(0,240,255,0.6)] transition-all transform hover:scale-105 active:scale-95">
+            <button className="flex items-center gap-2 px-7 py-3.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-sm sm:text-base rounded-full shadow-[0_0_25px_rgba(0,240,255,0.6)] transition-all transform hover:scale-105 active:scale-95">
               <RotateCcw className="w-4 h-4" />
               PLAY AGAIN
             </button>
@@ -415,17 +458,18 @@ export default function GameCanvas({
         )}
       </div>
 
-      {/* On-Screen Mobile Jump Button */}
-      <button
-        onPointerDown={(e) => {
-          e.preventDefault();
-          triggerFlap();
-        }}
-        className="mt-4 sm:hidden w-full max-w-xs py-3.5 bg-gradient-to-r from-cyan-600/40 to-purple-600/40 hover:from-cyan-600/60 hover:to-purple-600/60 border border-cyan-400/50 rounded-2xl font-black tracking-widest text-cyan-300 shadow-lg active:scale-95 transition-all text-sm"
-      >
-        TAP TO JUMP ⚡
-      </button>
+      {/* On-Screen Mobile Jump Button (hidden in fullscreen) */}
+      {!isFullscreen && (
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault();
+            triggerFlap();
+          }}
+          className="mt-4 sm:hidden w-full max-w-xs py-3.5 bg-gradient-to-r from-cyan-600/40 to-purple-600/40 hover:from-cyan-600/60 hover:to-purple-600/60 border border-cyan-400/50 rounded-2xl font-black tracking-widest text-cyan-300 shadow-lg active:scale-95 transition-all text-sm"
+        >
+          TAP TO JUMP ⚡
+        </button>
+      )}
     </div>
   );
 }
-
